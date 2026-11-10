@@ -167,17 +167,23 @@ These are independent experiments, not a promise that preprocessing improves eac
 
 ## Libraries, APIs, licensing, and model data
 
-Coordinates and versions are pinned in `pom.xml`; versions were checked against Maven Central and the projects' published metadata:
+Coordinates and versions are pinned in `pom.xml`; versions were checked against Maven Central and the projects' published metadata. The role below describes how each library is used in this POC:
 
-| Library | Maven coordinate | API use | License / local data |
-|---|---|---|---|
-| Library | Maven coordinate | API use | License / local data |
-|---|---|---|---|
-| [Tess4J](https://github.com/nguyenq/tess4j) | `net.sourceforge.tess4j:tess4j:5.16.0` | `net.sourceforge.tess4j.Tesseract#doOCR(BufferedImage)` and word-level confidence via `getWords(BufferedImage, RIL_WORD)` | Apache-2.0; Tesseract/leptonica native code and JNA are resolved from Maven. Trained data is separately downloaded; the official `tessdata` repository is Apache-2.0. |
-| [RapidOCR4j](https://github.com/hzkitty/RapidOCR4j) | `io.github.hzkitty:rapidocr4j:1.0.3` | `io.github.hzkitty.RapidOCR#create()` and `run(BufferedImage)` | Apache-2.0 project. Its packaged PP-OCRv4 detection/recognition and orientation models originate from [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR), which is Apache-2.0. ONNX Runtime is MIT and OpenCV is Apache-2.0. Models ship in the RapidOCR4j artifact; no Python or separate model download is required. |
-| [OpenCV](https://github.com/opencv/opencv) / [OpenPnP packaging](https://github.com/openpnp/opencv) | `org.openpnp:opencv:4.6.0-0` | Java API `org.opencv.*`; native library loaded locally/shared by the OpenPnP loader | OpenCV 4.5+ is Apache-2.0. The dependency bundles supported platform native files. Version matches RapidOCR4j's OpenCV dependency. |
-| [BoofCV](https://github.com/lessthanoptimal/BoofCV) | `org.boofcv:boofcv-all:1.2.2` | `boofcv.io.image.ConvertBufferedImage`, `GrayU8`, and `BlurImageOps` | Apache-2.0; no trained model or native library required. |
-| [ImageJ 1.x](https://github.com/imagej/ImageJ) | `net.imagej:ij:1.54p` | `ij.ImagePlus`, `ij.process.ByteProcessor`, and `ij.plugin.ContrastEnhancer` | ImageJ is public domain; no model or native library required. |
+| Library | What it does here | Maven coordinate | API used | License / local data |
+|---|---|---|---|---|
+| [Tess4J](https://github.com/nguyenq/tess4j) | OCR engine: sends the supplied image to Tesseract and returns recognized text plus an average word-confidence score when available. Used directly by `TESS4J` and after preprocessing in the Tess4J combination modes. | `net.sourceforge.tess4j:tess4j:5.16.0` | `net.sourceforge.tess4j.Tesseract#doOCR(BufferedImage)` and `getWords(BufferedImage, RIL_WORD)` | Apache-2.0; Tesseract/leptonica native code and JNA are resolved from Maven. Trained data is separately downloaded; the official `tessdata` repository is Apache-2.0. |
+| [RapidOCR4j](https://github.com/hzkitty/RapidOCR4j) | OCR engine: locally detects text regions and recognizes their characters using bundled ONNX models. `RAPIDOCR` gives it the original image; `OPENCV_RAPIDOCR` gives it the OpenCV-preprocessed image. | `io.github.hzkitty:rapidocr4j:1.0.3` | `io.github.hzkitty.RapidOCR#create()` and `run(BufferedImage)` | Apache-2.0 project. Its packaged PP-OCRv4 detection/recognition and orientation models originate from [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR), which is Apache-2.0. ONNX Runtime is MIT and OpenCV is Apache-2.0. Models ship in the RapidOCR4j artifact; no Python or separate model download is required. |
+| [OpenCV](https://github.com/opencv/opencv) / [OpenPnP packaging](https://github.com/openpnp/opencv) | Preprocessor for the two OpenCV modes: grayscale conversion, median denoising, local contrast enhancement, attempted long horizontal-line removal, and limited skew correction. It does not recognize text itself. | `org.openpnp:opencv:4.6.0-0` | Java API `org.opencv.*`; native library loaded locally/shared by the OpenPnP loader | OpenCV 4.5+ is Apache-2.0. The dependency bundles supported platform native files. Version matches RapidOCR4j's OpenCV dependency. |
+| [BoofCV](https://github.com/lessthanoptimal/BoofCV) | Preprocessor for `BOOFCV_TESS4J`: converts to grayscale and applies a light Gaussian blur before Tess4J. It does not recognize text itself. | `org.boofcv:boofcv-all:1.2.2` | `boofcv.io.image.ConvertBufferedImage`, `GrayU8`, and `BlurImageOps` | Apache-2.0; no trained model or native library required. |
+| [ImageJ 1.x](https://github.com/imagej/ImageJ) | Preprocessor for `IMAGEJ_TESS4J`: converts to grayscale, applies a median filter, and stretches the histogram for contrast before Tess4J. It does not recognize text itself. | `net.imagej:ij:1.54p` | `ij.ImagePlus`, `ij.process.ByteProcessor`, and `ij.plugin.ContrastEnhancer` | ImageJ is public domain; no model or native library required. |
+
+### Why combine a preprocessor with an OCR engine?
+
+An OCR engine can struggle when text has noise, uneven contrast, or interference. A preprocessing library can try to make those features easier for the engine to read—for example, by denoising or increasing contrast—then Tess4J or RapidOCR4j performs the actual text recognition. The combined modes let you compare an OCR engine on the original image versus a specifically processed version, helping identify whether that preprocessing helps for your images. `TESS4J` and `RAPIDOCR` provide direct-engine baselines; `COMPARE ALL` runs every pipeline on the same input.
+
+Preprocessing is heuristic and may also remove or alter useful character strokes, so a combination is not automatically more accurate. Compare the output against known text (ground truth) using CER/WER before deciding whether a combination helps your images. OpenCV's line removal and skew correction are attempts, not guarantees; destroyed or fully obscured characters cannot reliably be reconstructed.
+
+RapidOCR4j is an OCR engine, not an image enhancer. It runs locally in Java using ONNX Runtime and included trained models. Its pipeline detects text regions and recognizes characters, returning text and confidence values for recognized regions. It requires no Python runtime or cloud service. Like other OCR systems, it can misread heavy distortions, and its confidence scores are not directly comparable with Tesseract's.
 
 These are the direct library/project licenses and runtime/model notes; a company should also review the full transitive dependency and model notices for its distribution use. Model provenance and licenses can be updated by upstream separately from the Java wrapper.
 

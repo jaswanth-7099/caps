@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>CAPTCHA Test Harness for the OCR POC</title>
+<style>
+  :root {
+    font-family: Inter, system-ui, -apple-system, sans-serif;
+    color: #111827;
+    background: #f8fafc;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 24px; }
+  main { max-width: 960px; margin: 0 auto; }
+  h1 { font-size: 1.4rem; margin: 0 0 4px; }
+  p.sub { color: #4b5563; margin: 0 0 20px; font-size: 0.92rem; }
+  .card {
+    background: #fff; border: 1px solid #e5e7eb; border-radius: 10px;
+    padding: 16px 20px; margin-bottom: 16px;
+  }
+  .card h2 { font-size: 1rem; margin: 0 0 12px; }
+  .presets { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+  button {
+    background: #2563eb; color: #fff; border: none; border-radius: 6px;
+    padding: 8px 14px; font-size: 0.88rem; cursor: pointer;
+  }
+  button.secondary { background: #64748b; }
+  button.ghost { background: #eef2ff; color: #3730a3; }
+  button:hover { filter: brightness(1.08); }
+  .grid { display: grid; grid-template-columns: 260px 1fr; gap: 20px; }
+  @media (max-width: 720px) { .grid { grid-template-columns: 1fr; } }
+  label ctl { display: block; }
+  .ctl { display: flex; justify-content: space-between; align-items: center; margin: 7px 0; font-size: 0.85rem; }
+  .ctl input[type="range"] { width: 130px; }
+  .ctl .val { color: #6b7280; width: 34px; text-align: right; }
+  .ctl input[type="checkbox"] { margin-left: auto; }
+  canvas#cap {
+    border: 1px solid #d1d5db; border-radius: 6px;
+    image-rendering: pixelated; background: #fff;
+    width: 420px; max-width: 100%;
+  }
+  .code {
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-size: 1.15rem; font-weight: 700; letter-spacing: 3px;
+    margin: 10px 0; color: #065f46;
+  }
+  textarea {
+    width: 100%; height: 90px; font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-size: 0.72rem; border: 1px solid #d1d5db; border-radius: 6px; padding: 8px;
+  }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  input#api {
+    width: 280px; padding: 8px; border: 1px solid #d1d5db; border-radius: 6px;
+    font-size: 0.85rem;
+  }
+  table { border-collapse: collapse; width: 100%; font-size: 0.85rem; margin-top: 8px; }
+  th, td { border: 1px solid #e5e7eb; padding: 6px 10px; text-align: left; }
+  th { background: #f1f5f9; }
+  .ok { color: #047857; font-weight: 600; }
+  .bad { color: #b91c1c; font-weight: 600; }
+  .hint { font-size: 0.8rem; color: #6b7280; margin-top: 8px; }
+  .legend { font-size: 0.85rem; color: #374151; line-height: 1.55; }
+  .legend b.good { color: #047857; }
+  .legend b.risky { color: #b45309; }
+  .legend b.fatal { color: #b91c1c; }
+</style>
+</head>
+<body>
+<main>
+  <h1>CAPTCHA Test Harness for the OCR POC</h1>
+  <p class="sub">Generates distorted alphanumeric CAPTCHA PNGs with known ground truth, so you can measure which engine decodes what. Run your Spring Boot POC on port 8080 (or change the API URL below) to test live.</p>
+
+  <div class="card">
+    <h2>1. Pick a distortion level</h2>
+    <div class="presets">
+      <button data-preset="easy">Easy (decodes reliably)</button>
+      <button data-preset="medium">Medium (usually decodes)</button>
+      <button data-preset="hard">Hard (often fails)</button>
+      <button data-preset="extreme">Extreme (Tesseract fails)</button>
+    </div>
+    <div class="grid">
+      <div>
+        <div class="ctl"><span>Code length</span><input type="range" id="len" min="3" max="8" value="6"><span class="val" id="lenV">6</span></div>
+        <div class="ctl"><span>Font size</span><input type="range" id="fs" min="14" max="30" value="22"><span class="val" id="fsV">22</span></div>
+        <div class="ctl"><span>Max rotation (deg)</span><input type="range" id="rot" min="0" max="45" value="8"><span class="val" id="rotV">8</span></div>
+        <div class="ctl"><span>Wave amplitude</span><input type="range" id="wave" min="0" max="10" value="2"><span class="val" id="waveV">2</span></div>
+        <div class="ctl"><span>Letter overlap</span><input type="range" id="overlap" min="0" max="60" value="0"><span class="val" id="overlapV">0</span></div>
+        <div class="ctl"><span>Noise dots</span><input type="range" id="dots" min="0" max="300" value="40"><span class="val" id="dotsV">40</span></div>
+        <div class="ctl"><span>Interference lines</span><input type="range" id="lines" min="0" max="8" value="1"><span class="val" id="linesV">1</span></div>
+        <div class="ctl"><span>Colored text</span><input type="checkbox" id="color"></div>
+      </div>
+      <div>
+        <canvas id="cap" width="140" height="35"></canvas>
+        <div class="code">Ground truth: <span id="codeTxt"></span></div>
+        <div class="row">
+          <button id="regen">Generate new</button>
+          <button class="secondary" id="copyB64">Copy base64</button>
+          <button class="secondary" id="copyBatch">Copy batch JSON (10 samples)</button>
+        </div>
+        <textarea id="b64out" readonly placeholder="base64 appears here"></textarea>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>2. Test against the Spring Boot POC</h2>
+    <div class="row" style="align-items:center">
+      <input id="api" value="http://localhost:8080/api/ocr" />
+      <button id="sendOne">Decode current image</button>
+      <button id="sendBatch">Run 20-sample accuracy test</button>
+    </div>
+    <div id="results"></div>
+    <p class="hint">If the browser blocks the request, the POC rejects cross-origin calls: add <code>@CrossOrigin(origins = "*")</code> on <code>OcrController</code> (browser testing only, remove in production).</p>
+  </div>
+
+  <div class="card">
+    <h2>What Tesseract (both engines) handles vs. fails</h2>
+    <div class="legend">
+      <b class="good">Decodes reliably:</b> slight rotation (up to ~10&deg;), mild wave, sparse noise dots, thin straight interference lines, spaced characters, dark text on light background.<br>
+      <b class="risky">Borderline:</b> rotation 15&ndash;25&deg;, strong wave, moderate overlap, colored text with low contrast, dotted characters.<br>
+      <b class="fatal">Usually fails:</b> heavy character overlap, warped/wavy strokes through glyphs, complex backgrounds, very tight letter spacing, rotation above ~35&deg;.
+    </div>
+  </div>
+</main>
+
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const canvas = $("cap");
+  const ctx = canvas.getContext("2d");
+  const CHARSET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no I, O, 0, 1 (ambiguous glyphs)
+  let currentCode = "";
+
+  const sliders = ["len", "fs", "rot", "wave", "overlap", "dots", "lines"];
+  sliders.forEach((id) => {
+    $(id).addEventListener("input", () => { $(id + "V").textContent = $(id).value; regenerate(); });
+  });
+  $("color").addEventListener("change", regenerate);
+
+  const PRESETS = {
+    easy:    { len: 6, fs: 22, rot: 8,  wave: 2, overlap: 0,  dots: 40,  lines: 1, color: false },
+    medium:  { len: 6, fs: 22, rot: 16, wave: 4, overlap: 15, dots: 120, lines: 2, color: false },
+    hard:    { len: 6, fs: 24, rot: 28, wave: 7, overlap: 35, dots: 200, lines: 4, color: true  },
+    extreme: { len: 7, fs: 26, rot: 40, wave: 10, overlap: 55, dots: 300, lines: 7, color: true }
+  };
+
+  document.querySelectorAll("[data-preset]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const p = PRESETS[btn.dataset.preset];
+      sliders.forEach((id) => { $(id).value = p[id]; $(id + "V").textContent = p[id]; });
+      $("color").checked = p.color;
+      regenerate();
+    });
+  });
+
+  function randInt(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
+  function randomCode(len) {
+    let s = "";
+    for (let i = 0; i < len; i++) s += CHARSET[randInt(0, CHARSET.length - 1)];
+    return s;
+  }
+
+  function drawCaptcha(code) {
+    const W = canvas.width, H = canvas.height;
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, W, H);
+
+    const fs = +$("fs").value;
+    const rotMax = (+$("rot").value) * Math.PI / 180;
+    const waveAmp = +$("wave").value;
+    const overlap = +$("overlap").value;
+    const useColor = $("color").checked;
+
+    const spacing = fs * 0.72 - overlap;
+    const totalW = spacing * (code.length - 1) + fs * 0.8;
+    let x = (W - totalW) / 2 + fs * 0.1;
+
+    for (const ch of code) {
+      ctx.save();
+      const yBase = H / 2 + (waveAmp ? waveAmp * Math.sin(x * 0.09) : 0) + randInt(-2, 2);
+      ctx.translate(x + fs * 0.4, yBase);
+      ctx.rotate((Math.random() * 2 - 1) * rotMax);
+      ctx.font = "bold " + (fs + randInt(-2, 2)) + "px Arial, sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      if (useColor) {
+        const v = randInt(0, 90);
+        ctx.fillStyle = "rgb(" + v + "," + randInt(0, 90) + "," + randInt(0, 90) + ")";
+      } else {
+        ctx.fillStyle = "#111111";
+      }
+      ctx.fillText(ch, 0, 0);
+      ctx.restore();
+      x += spacing;
+    }
+
+    // interference lines
+    const nLines = +$("lines").value;
+    for (let i = 0; i < nLines; i++) {
+      ctx.strokeStyle = useColor ? "rgba(80,80,160,0.55)" : "rgba(60,60,60,0.5)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(randInt(0, W * 0.2), randInt(0, H));
+      ctx.bezierCurveTo(randInt(0, W), randInt(0, H), randInt(0, W), randInt(0, H), randInt(W * 0.8, W), randInt(0, H));
+      ctx.stroke();
+    }
+
+    // noise dots
+    const nDots = +$("dots").value;
+    for (let i = 0; i < nDots; i++) {
+      const v = randInt(70, 180);
+      ctx.fillStyle = "rgb(" + v + "," + v + "," + v + ")";
+      ctx.fillRect(randInt(0, W), randInt(0, H), 1, 1);
+    }
+  }
+
+  function regenerate() {
+    currentCode = randomCode(+$("len").value);
+    drawCaptcha(currentCode);
+    $("codeTxt").textContent = currentCode;
+    $("b64out").value = canvas.toDataURL("image/png");
+  }
+
+  $("regen").addEventListener("click", regenerate);
+
+  $("copyB64").addEventListener("click", () => {
+    navigator.clipboard.writeText($("b64out").value);
+    $("copyB64").textContent = "Copied!";
+    setTimeout(() => ($("copyB64").textContent = "Copy base64"), 1200);
+  });
+
+  function buildBatch(n) {
+    const samples = [];
+    for (let i = 0; i < n; i++) {
+      const code = randomCode(+$("len").value);
+      drawCaptcha(code);
+      samples.push({ imageBase64: canvas.toDataURL("image/png"), expected: code });
+    }
+    regenerate();
+    return JSON.stringify({ samples: samples });
+  }
+
+  $("copyBatch").addEventListener("click", () => {
+    navigator.clipboard.writeText(buildBatch(10));
+    $("copyBatch").textContent = "Copied!";
+    setTimeout(() => ($("copyBatch").textContent = "Copy batch JSON (10 samples)"), 1200);
+  });
+
+  function renderResults(html) { $("results").innerHTML = html; }
+
+  async function post(path, body) {
+    const res = await fetch($("api").value + path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    return res.json();
+  }
+
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+
+  $("sendOne").addEventListener("click", async () => {
+    renderResults("<p>Decoding...</p>");
+    try {
+      const out = await post("/decode", { imageBase64: $("b64out").value, expected: currentCode });
+      let rows = out.results.map((r) =>
+        "<tr><td>" + esc(r.engine) + "</td>" +
+        "<td class='" + (r.text === currentCode ? "ok" : "bad") + "'>" + esc(r.text) + "</td>" +
+        "<td>" + (r.confidence == null ? "-" : r.confidence.toFixed(1)) + "</td>" +
+        "<td>" + r.durationMs + " ms</td>" +
+        "<td>" + (r.success ? "<span class='ok'>OK</span>" : "<span class='bad'>" + esc(r.error) + "</span>") + "</td></tr>");
+      renderResults("<table><tr><th>Engine</th><th>Decoded</th><th>Confidence</th><th>Time</th><th>Status</th></tr>" + rows.join("") + "</table>");
+    } catch (e) {
+      renderResults("<p class='bad'>Request failed: " + esc(e.message) + ". Is the POC running and CORS enabled?</p>");
+    }
+  });
+
+  $("sendBatch").addEventListener("click", async () => {
+    renderResults("<p>Running 20-sample accuracy test...</p>");
+    try {
+      const body = JSON.parse(buildBatch(20));
+      const out = await post("/batch", body);
+      let rows = out.stats.map((s) =>
+        "<tr><td>" + esc(s.engine) + "</td>" +
+        "<td>" + s.exactMatches + " / " + s.totalSamples + "</td>" +
+        "<td class='" + (s.accuracyPct >= 80 ? "ok" : s.accuracyPct >= 50 ? "" : "bad") + "'>" + s.accuracyPct.toFixed(1) + "%</td></tr>");
+      renderResults("<table><tr><th>Engine</th><th>Exact matches</th><th>Accuracy</th></tr>" + rows.join("") + "</table>");
+    } catch (e) {
+      renderResults("<p class='bad'>Request failed: " + esc(e.message) + ". Is the POC running and CORS enabled?</p>");
+    }
+  });
+
+  regenerate();
+})();
+</script>
+</body>
+</html>
