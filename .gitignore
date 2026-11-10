@@ -1,0 +1,5 @@
+target/
+output/*
+!output/.gitkeep
+*.log
+distorted-message-ocr-poc.zip
