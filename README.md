@@ -1,6 +1,6 @@
 # Distorted Message OCR POC
 
-A standalone, local Java 21/Maven command-line application for extracting text from distorted chat-message images. It evaluates Tess4J/Tesseract, RapidOCR4j, and optional OpenCV, BoofCV, or ImageJ preprocessing. The six modes are independent: selecting one mode constructs and runs only that mode's preprocessor and OCR engine.
+A standalone, local Java 21/Maven application for extracting text from distorted chat-message images. It includes a browser-based local UI and CLI, and evaluates Tess4J/Tesseract, RapidOCR4j, and optional OpenCV, BoofCV, or ImageJ preprocessing. The six modes are independent: selecting one mode constructs and runs only that mode's preprocessor and OCR engine.
 
 This project returns recognized text; it does not treat an enhanced image as the result. Preprocessing is heuristic. No OCR engine can reliably reconstruct characters that have been fully obscured or destroyed.
 
@@ -21,6 +21,27 @@ mvn -version
 ```
 
 Install the current supported [Microsoft Visual C++ Redistributable](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist?view=msvc-170) for Windows x64 before running Tess4J modes. RapidOCR4j uses packaged ONNX Runtime and OpenCV native binaries and does not require Python.
+
+## Browser UI
+
+Start the app from the project directory:
+
+```powershell
+mvn exec:java "-Dexec.args=--web --tessdata C:/tools/tesseract/tessdata"
+```
+
+In Eclipse, run `com.example.ocr.Main` as a Java Application and set **Program arguments** to:
+
+```text
+--web --tessdata "C:\path\to\tessdata"
+-------------------------------------------
+In Eclipse, run com.example.ocr.Main with --web --tessdata "D:\caps\tessdata"; open http://127.0.0.1:8765/ if it does not open automatically.
+```
+The app prints its local URL (`http://127.0.0.1:8765/`) and opens it in your default browser when possible. The server binds to loopback only; OCR is done on your computer. Use Ctrl+C in the terminal or stop the Eclipse launch to stop the server.
+
+On the page, drag/drop or browse for one PNG/JPG/JPEG/BMP image or a Base64 `.txt` file, or paste Base64/data URI into the text box. Choose one OCR mode or check **Compare all six modes**, then select **Run OCR**. The image preview and extracted text appear together. Optionally enter ground-truth text to see CER/WER. Each successful result can be saved as a `.txt` file. In comparison mode, errors for individual modes appear in their result cards and do not hide other results.
+
+Use `--port 8765` to change the local port and `--language eng` to set the default Tesseract language. The language field in the page can override that default. The `--tessdata` value must be the directory containing the trained data for Tess4J modes.
 
 ## Build and run
 

@@ -49,6 +49,17 @@ class ImageInputHandlerTest {
     }
 
     @Test
+    void readsJpegDataUri() throws Exception {
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        ImageIO.write(testImage(), "jpeg", output);
+        String dataUri = "data:image/jpeg;base64," + Base64.getEncoder().encodeToString(output.toByteArray());
+
+        DecodedImage decoded = new ImageInputHandler().fromBase64(dataUri);
+
+        assertEquals(24, decoded.image().getWidth());
+    }
+
+    @Test
     void readsBase64TextFile() throws Exception {
         Path textFile = tempDir.resolve("message.txt");
         Files.writeString(textFile, Base64.getEncoder().encodeToString(pngBytes()), StandardCharsets.UTF_8);

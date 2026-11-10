@@ -9,7 +9,10 @@ import com.example.ocr.output.ResultWriter;
 import com.example.ocr.service.OCRComparisonRow;
 import com.example.ocr.service.OCRComparisonService;
 import com.example.ocr.service.OCRExecutionService;
+import com.example.ocr.web.OcrWebServer;
 
+import java.awt.Desktop;
+import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -23,6 +26,10 @@ public final class Main {
         try {
             if (args.length == 0 || List.of(args).contains("--help")) {
                 printUsage();
+                return;
+            }
+            if (List.of(args).contains("--web")) {
+                runWeb(args);
                 return;
             }
             Arguments arguments = Arguments.parse(args);
@@ -47,6 +54,54 @@ public final class Main {
             System.err.println("OCR failed: " + exception.getClass().getSimpleName() + ": "
                     + (exception.getMessage() == null ? "No error message." : exception.getMessage()));
             System.exit(1);
+        }
+    }
+
+    private static void runWeb(String[] args) throws Exception {
+        int port = 8765;
+        Path tessdata = null;
+        String language = "eng";
+        for (int i = 0; i < args.length; i++) {
+            switch (args[i]) {
+                case "--web" -> {
+                }
+                case "--port" -> {
+                    if (++i >= args.length) {
+                        throw new IllegalArgumentException("Missing value for --port.");
+                    }
+                    port = Integer.parseInt(args[i]);
+                    if (port < 0 || port > 65535) {
+                        throw new IllegalArgumentException("--port must be between 0 and 65535.");
+                    }
+                }
+                case "--tessdata" -> {
+                    if (++i >= args.length) {
+                        throw new IllegalArgumentException("Missing value for --tessdata.");
+                    }
+                    tessdata = Path.of(args[i]);
+                }
+                case "--language" -> {
+                    if (++i >= args.length) {
+                        throw new IllegalArgumentException("Missing value for --language.");
+                    }
+                    language = args[i];
+                }
+                default -> throw new IllegalArgumentException("Unknown web option: " + args[i]);
+            }
+        }
+        OcrWebServer server = new OcrWebServer(port, tessdata, language);
+        Runtime.getRuntime().addShutdownHook(new Thread(server::close, "ocr-web-shutdown"));
+        server.start();
+        URI uri = URI.create("http://127.0.0.1:" + server.port() + "/");
+        System.out.println("OCR web app is running locally at " + uri);
+        System.out.println("Press Ctrl+C to stop it.");
+        if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
+            try {
+                Desktop.getDesktop().browse(uri);
+            } catch (Exception exception) {
+                System.err.println("Could not open a browser automatically: " + exception.getMessage());
+                System.err.println("Open this local URL manually: " + uri);
+            }
         }
     }
 
@@ -79,6 +134,7 @@ public final class Main {
     private static void printUsage() {
         System.out.println("""
                 Usage:
+                  --web [--port 8765] [--tessdata PATH] [--language eng]
                   --image PATH | --base64 VALUE | --base64-file PATH
                   --mode TESS4J|RAPIDOCR|OPENCV_TESS4J|OPENCV_RAPIDOCR|BOOFCV_TESS4J|IMAGEJ_TESS4J
                   [--compare] [--ground-truth PATH] [--output PATH] [--report PATH]

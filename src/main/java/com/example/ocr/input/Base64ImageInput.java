@@ -8,9 +8,12 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Base64;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public final class Base64ImageInput {
-    private static final String PNG_DATA_URI_PREFIX = "data:image/png;base64,";
+    private static final Pattern IMAGE_DATA_URI = Pattern.compile(
+            "^data:image/(?:png|jpe?g|bmp);base64,", Pattern.CASE_INSENSITIVE);
 
     private Base64ImageInput() {
     }
@@ -27,8 +30,11 @@ public final class Base64ImageInput {
             throw new IOException("Base64 image input is empty.");
         }
         String payload = input.strip();
-        if (payload.regionMatches(true, 0, PNG_DATA_URI_PREFIX, 0, PNG_DATA_URI_PREFIX.length())) {
-            payload = payload.substring(PNG_DATA_URI_PREFIX.length());
+        Matcher dataUri = IMAGE_DATA_URI.matcher(payload);
+        if (dataUri.find()) {
+            payload = payload.substring(dataUri.end());
+        } else if (payload.regionMatches(true, 0, "data:", 0, "data:".length())) {
+            throw new IOException("Unsupported image data URI. Supported types: PNG, JPG, JPEG, BMP.");
         }
         payload = payload.replaceAll("\\s", "");
 

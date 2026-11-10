@@ -1,0 +1,375 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Distorted Message OCR</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #172033;
+      --muted: #64708a;
+      --line: #dce2ed;
+      --surface: #ffffff;
+      --canvas: #f3f5fa;
+      --accent: #5548d9;
+      --accent-dark: #4034bd;
+      --danger: #a73535;
+      font-family: Inter, "Segoe UI", Arial, sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--canvas); color: var(--ink); }
+    header {
+      background: #17172a;
+      color: white;
+      padding: 22px max(24px, calc((100vw - 1180px) / 2));
+    }
+    header h1 { margin: 0; font-size: 21px; letter-spacing: -.3px; }
+    header p { margin: 7px 0 0; color: #c4c6dc; font-size: 13px; }
+    main { max-width: 1180px; margin: 28px auto; padding: 0 20px 36px; }
+    .layout { display: grid; grid-template-columns: minmax(330px, .92fr) minmax(380px, 1.08fr); gap: 20px; }
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 5px 18px #1720330b;
+    }
+    h2 { font-size: 16px; margin: 0 0 16px; }
+    .drop-zone {
+      display: grid;
+      justify-items: center;
+      align-content: center;
+      min-height: 132px;
+      padding: 18px;
+      border: 1.5px dashed #aeb8cc;
+      border-radius: 9px;
+      background: #fafbfe;
+      text-align: center;
+      cursor: pointer;
+    }
+    .drop-zone.dragging { border-color: var(--accent); background: #f0efff; }
+    .drop-zone strong { font-size: 14px; }
+    .drop-zone span { color: var(--muted); font-size: 12px; margin-top: 6px; }
+    #fileInput { position: absolute; width: 1px; height: 1px; opacity: 0; }
+    .file-name { color: var(--muted); font-size: 12px; min-height: 18px; margin-top: 8px; overflow-wrap: anywhere; }
+    .divider { display: flex; align-items: center; gap: 12px; color: #8992a7; font-size: 11px; margin: 15px 0; }
+    .divider::before, .divider::after { content: ""; height: 1px; background: var(--line); flex: 1; }
+    label { display: block; font-size: 12px; font-weight: 650; margin: 0 0 7px; }
+    textarea, select {
+      width: 100%;
+      border: 1px solid #cbd3e1;
+      border-radius: 7px;
+      padding: 10px 11px;
+      color: var(--ink);
+      background: white;
+      font: inherit;
+    }
+    textarea { min-height: 112px; resize: vertical; font: 12px/1.45 Consolas, monospace; }
+    select { min-height: 39px; }
+    .hint { margin: 6px 0 0; font-size: 11px; color: var(--muted); line-height: 1.5; }
+    .options { margin-top: 18px; display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .compare-option { display: flex; align-items: center; gap: 8px; margin: 15px 0 0; font-size: 13px; }
+    .compare-option label { margin: 0; font-size: 13px; cursor: pointer; }
+    input[type="checkbox"] { accent-color: var(--accent); width: 15px; height: 15px; margin: 0; }
+    .ground-truth { margin-top: 15px; }
+    .run-button {
+      width: 100%; margin-top: 18px; border: 0; border-radius: 7px; padding: 12px 16px;
+      background: var(--accent); color: white; font-size: 14px; font-weight: 700; cursor: pointer;
+    }
+    .run-button:hover { background: var(--accent-dark); }
+    .run-button:disabled { opacity: .58; cursor: wait; }
+    .status { color: var(--muted); font-size: 12px; min-height: 18px; margin: 10px 0 0; }
+    .status.error { color: var(--danger); }
+    .image-frame {
+      display: grid; place-items: center; min-height: 230px; padding: 12px;
+      border-radius: 8px; background: #f6f7fa; border: 1px solid #edf0f5;
+    }
+    .image-frame img { display: none; max-width: 100%; max-height: 440px; object-fit: contain; }
+    .empty { color: #8992a7; text-align: center; font-size: 13px; }
+    .results { margin-top: 20px; }
+    .results-heading { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+    .results-heading h2 { margin: 0; }
+    .winner { color: var(--muted); font-size: 11px; margin: 8px 0 12px; }
+    .result-card { border: 1px solid var(--line); border-radius: 8px; padding: 13px; margin-top: 9px; }
+    .result-title { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+    .result-title strong { font-size: 12px; }
+    .meta { color: var(--muted); font-size: 11px; margin-top: 4px; }
+    .result-text {
+      white-space: pre-wrap; overflow-wrap: anywhere; margin: 10px 0 0; padding: 10px;
+      background: #f7f8fb; border-radius: 6px; font: 12px/1.5 Consolas, monospace;
+    }
+    .result-error { color: var(--danger); }
+    .save-button {
+      flex: 0 0 auto; padding: 5px 8px; border: 1px solid #cbd3e1; border-radius: 5px;
+      background: white; color: var(--ink); font-size: 11px; cursor: pointer;
+    }
+    .disclaimer { color: var(--muted); font-size: 11px; line-height: 1.5; margin: 14px 0 0; }
+    @media (max-width: 820px) {
+      main { margin-top: 16px; padding: 0 12px 24px; }
+      .layout { grid-template-columns: 1fr; }
+      .panel { padding: 16px; }
+    }
+    @media (max-width: 420px) { .options { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Distorted Message OCR</h1>
+    <p>Run a single OCR mode or compare all six locally on your computer.</p>
+  </header>
+  <main>
+    <div class="layout">
+      <section class="panel" aria-labelledby="input-heading">
+        <h2 id="input-heading">1. Choose an input</h2>
+        <label class="drop-zone" id="dropZone" for="fileInput">
+          <strong>Drop an image or Base64 text file here</strong>
+          <span>or click to browse · PNG, JPG, JPEG, BMP, TXT</span>
+        </label>
+        <input id="fileInput" type="file" accept=".png,.jpg,.jpeg,.bmp,.txt,image/png,image/jpeg,image/bmp,text/plain">
+        <div class="file-name" id="fileName">No file selected</div>
+
+        <div class="divider">OR PASTE BASE64</div>
+        <label for="base64Input">Base64 image or data URI</label>
+        <textarea id="base64Input" spellcheck="false" placeholder="Paste plain Base64 or data:image/png;base64,..."></textarea>
+        <p class="hint">If both a file and text are provided, the pasted Base64 is used. Your image is processed by this local app and is not sent to a cloud service.</p>
+
+        <div class="options">
+          <div id="modeField">
+            <label for="modeSelect">OCR mode</label>
+            <select id="modeSelect">
+              <option value="TESS4J">TESS4J</option>
+              <option value="RAPIDOCR">RAPIDOCR</option>
+              <option value="OPENCV_TESS4J">OPENCV_TESS4J</option>
+              <option value="OPENCV_RAPIDOCR">OPENCV_RAPIDOCR</option>
+              <option value="BOOFCV_TESS4J">BOOFCV_TESS4J</option>
+              <option value="IMAGEJ_TESS4J">IMAGEJ_TESS4J</option>
+            </select>
+          </div>
+          <div>
+            <label for="language">Tesseract language</label>
+            <input id="language" type="text" value="eng" autocomplete="off"
+              style="width:100%; min-height:39px; padding:9px 10px; border:1px solid #cbd3e1; border-radius:7px">
+          </div>
+        </div>
+        <div class="compare-option">
+          <input id="compareAll" type="checkbox">
+          <label for="compareAll">Compare all six modes</label>
+        </div>
+        <div class="ground-truth">
+          <label for="groundTruth">Ground truth (optional, for CER/WER)</label>
+          <textarea id="groundTruth" style="min-height:68px; font-family:inherit" placeholder="Paste the correct message text"></textarea>
+        </div>
+        <button class="run-button" id="runButton" type="button">Run OCR</button>
+        <p class="status" id="status" role="status" aria-live="polite"></p>
+      </section>
+
+      <section class="panel" aria-labelledby="preview-heading">
+        <h2 id="preview-heading">2. Image preview</h2>
+        <div class="image-frame">
+          <img id="imagePreview" alt="Selected image preview">
+          <div class="empty" id="emptyPreview">Choose or drop an image to preview it here.</div>
+        </div>
+        <div class="results" id="resultsSection" hidden>
+          <div class="results-heading"><h2>3. OCR results</h2></div>
+          <div class="winner" id="winner"></div>
+          <div id="resultsList"></div>
+        </div>
+        <p class="disclaimer">OCR can make mistakes on distorted or obscured text. Confidence values are not directly comparable between engines. CER/WER are shown only when you provide ground truth.</p>
+      </section>
+    </div>
+  </main>
+  <script>
+    const fileInput = document.getElementById("fileInput");
+    const dropZone = document.getElementById("dropZone");
+    const base64Input = document.getElementById("base64Input");
+    const fileName = document.getElementById("fileName");
+    const imagePreview = document.getElementById("imagePreview");
+    const emptyPreview = document.getElementById("emptyPreview");
+    const modeSelect = document.getElementById("modeSelect");
+    const compareAll = document.getElementById("compareAll");
+    const runButton = document.getElementById("runButton");
+    const status = document.getElementById("status");
+    const resultsSection = document.getElementById("resultsSection");
+    const resultsList = document.getElementById("resultsList");
+    const winner = document.getElementById("winner");
+    let selectedFile = null;
+    let selectedFileData = "";
+
+    function showPreview(source) {
+      if (!source || !source.startsWith("data:image/")) return;
+      imagePreview.src = source;
+      imagePreview.style.display = "block";
+      emptyPreview.style.display = "none";
+    }
+
+    function clearResults() {
+      resultsSection.hidden = true;
+      resultsList.replaceChildren();
+      winner.textContent = "";
+    }
+
+    function readFile(file) {
+      if (!file) return;
+      const name = file.name.toLowerCase();
+      const isText = name.endsWith(".txt") || file.type === "text/plain";
+      const isImage = /\.(png|jpe?g|bmp)$/.test(name) ||
+        ["image/png", "image/jpeg", "image/bmp"].includes(file.type);
+      if (!isText && !isImage) {
+        setStatus("Choose a PNG, JPG, JPEG, BMP, or Base64 .txt file.", true);
+        return;
+      }
+      selectedFile = file;
+      fileName.textContent = file.name;
+      clearResults();
+      const reader = new FileReader();
+      reader.onload = () => {
+        selectedFileData = String(reader.result || "");
+        if (isText) {
+          base64Input.value = selectedFileData;
+          const trimmed = selectedFileData.trim();
+          if (trimmed.startsWith("data:image/")) showPreview(trimmed);
+          else {
+            imagePreview.removeAttribute("src");
+            imagePreview.style.display = "none";
+            emptyPreview.style.display = "block";
+            emptyPreview.textContent = "Base64 text file ready. The image preview appears after OCR decodes it.";
+          }
+        } else {
+          base64Input.value = "";
+          showPreview(selectedFileData);
+        }
+        setStatus("Input ready.");
+      };
+      reader.onerror = () => setStatus("Could not read the selected file.", true);
+      isText ? reader.readAsText(file) : reader.readAsDataURL(file);
+    }
+
+    function setStatus(message, isError = false) {
+      status.textContent = message;
+      status.classList.toggle("error", isError);
+    }
+
+    fileInput.addEventListener("change", () => readFile(fileInput.files[0]));
+    base64Input.addEventListener("input", () => {
+      clearResults();
+      const value = base64Input.value.trim();
+      if (value.startsWith("data:image/")) showPreview(value);
+    });
+    compareAll.addEventListener("change", () => {
+      modeSelect.disabled = compareAll.checked;
+      document.getElementById("modeField").style.opacity = compareAll.checked ? ".55" : "1";
+    });
+    for (const eventName of ["dragenter", "dragover"]) {
+      dropZone.addEventListener(eventName, event => {
+        event.preventDefault();
+        dropZone.classList.add("dragging");
+      });
+    }
+    for (const eventName of ["dragleave", "drop"]) {
+      dropZone.addEventListener(eventName, event => {
+        event.preventDefault();
+        dropZone.classList.remove("dragging");
+      });
+    }
+    dropZone.addEventListener("drop", event => readFile(event.dataTransfer.files[0]));
+
+    runButton.addEventListener("click", async () => {
+      const pasted = base64Input.value.trim();
+      const imageData = pasted || selectedFileData;
+      if (!imageData) {
+        setStatus("Select an image/Base64 file or paste Base64 first.", true);
+        return;
+      }
+      runButton.disabled = true;
+      setStatus(compareAll.checked ? "Running all six modes locally…" : `Running ${modeSelect.value} locally…`);
+      resultsSection.hidden = true;
+      try {
+        const response = await fetch("/api/ocr", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            imageData,
+            compare: compareAll.checked,
+            mode: modeSelect.value,
+            language: document.getElementById("language").value.trim() || "eng",
+            groundTruth: document.getElementById("groundTruth").value || null
+          })
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || `Request failed (${response.status})`);
+        showPreview(data.imagePreview);
+        renderResults(data);
+        setStatus("OCR finished.");
+      } catch (error) {
+        setStatus(error.message || "OCR request failed.", true);
+      } finally {
+        runButton.disabled = false;
+      }
+    });
+
+    function renderResults(data) {
+      resultsList.replaceChildren();
+      resultsSection.hidden = false;
+      const valid = data.results.filter(item => !item.error);
+      if (data.compare && data.results.some(item => item.cer !== null)) {
+        const best = valid.filter(item => item.cer !== null)
+          .sort((a, b) => a.cer - b.cer || a.wer - b.wer || a.processingMillis - b.processingMillis)[0];
+        winner.textContent = best ? `Lowest CER: ${best.mode}` : "No successful result to rank.";
+      } else if (data.compare) {
+        const fastest = valid.slice().sort((a, b) => a.processingMillis - b.processingMillis)[0];
+        winner.textContent = fastest
+          ? `No ground truth supplied; fastest is ${fastest.mode}, not necessarily most accurate.`
+          : "No successful result to rank.";
+      } else {
+        winner.textContent = "";
+      }
+      for (const item of data.results) {
+        const card = document.createElement("article");
+        card.className = "result-card";
+        const title = document.createElement("div");
+        title.className = "result-title";
+        const details = document.createElement("div");
+        const name = document.createElement("strong");
+        name.textContent = item.mode;
+        const meta = document.createElement("div");
+        meta.className = "meta";
+        const fields = [`${item.processingMillis} ms`, `confidence ${formatMetric(item.confidence)}`];
+        if (item.cer !== null) fields.push(`CER ${formatMetric(item.cer)}`);
+        if (item.wer !== null) fields.push(`WER ${formatMetric(item.wer)}`);
+        meta.textContent = fields.join(" · ");
+        details.append(name, meta);
+        title.append(details);
+        if (!item.error) {
+          const save = document.createElement("button");
+          save.type = "button";
+          save.className = "save-button";
+          save.textContent = "Save .txt";
+          save.addEventListener("click", () => saveText(item));
+          title.append(save);
+        }
+        card.append(title);
+        const output = document.createElement("pre");
+        output.className = "result-text" + (item.error ? " result-error" : "");
+        output.textContent = item.error ? `Error: ${item.error}` : (item.text || "(No text detected.)");
+        card.append(output);
+        resultsList.append(card);
+      }
+    }
+
+    function formatMetric(value) {
+      return value === null || value === undefined ? "N/A" : Number(value).toFixed(4);
+    }
+
+    function saveText(item) {
+      const blob = new Blob([item.text || ""], { type: "text/plain;charset=utf-8" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = `${item.mode.toLowerCase()}-ocr.txt`;
+      link.click();
+      URL.revokeObjectURL(link.href);
+    }
+  </script>
+</body>
+</html>
